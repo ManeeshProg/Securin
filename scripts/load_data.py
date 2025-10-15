@@ -71,33 +71,11 @@ def load_recipes_from_json(json_file_path: str, db: Session):
 def main():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
-    # try:
-    #     existing_count = db.query(Recipe).count()
-    #     if existing_count > 0:
-    #         response = input(f"Database already contains {existing_count} recipes. Clear and reload? (yes/no): ")
-    #         if response.lower() == 'yes':
-    #             print("Clearing existing data...")
-    #             db.query(Recipe).delete()
-    #             db.commit()
-    #         else:
-    #             print("Aborted.")
-    #             return
-
-    #     # Load data
-    #     json_file_path = "US_recipes_null.json"
-    #     if not Path(json_file_path).exists():
-    #         print(f"Error: JSON file not found at {json_file_path}")
-    #         return
-
-    #     load_recipes_from_json(json_file_path, db)
-
-    # except Exception as e:
-    #     print(f"Error: {e}")
-    #     db.rollback()
-    # finally:
-    #     db.close()
-    if not json_file_path:
+    json_file_path="US_recipes_null.json"
+    if not Path(json_file_path).exists():
+        print(f"Error: JSON file not found at {json_file_path}")
         return
+    load_recipes_from_json(json_file_path, db)
     
 
 if __name__ == "__main__":
