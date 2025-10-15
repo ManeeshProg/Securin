@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Recipe Browser</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Recipe Browser</h1>
+
+    <!-- Pagination Controls -->
+    <div>
+        <label>Results per page:</label>
+        <select id="perPage" onchange="loadRecipes()">
+            <option value="15">15</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+        </select>
+
+        <label>Page:</label>
+        <button onclick="previousPage()">Previous</button>
+        <span id="pageInfo">Page 1</span>
+        <button onclick="nextPage()">Next</button>
+        <span id="totalInfo"></span>
+    </div>
+
+    <br>
+
+    <!-- Data Table -->
+    <table border="1" cellpadding="5" cellspacing="0" width="100%">
+        <thead>
+            <tr>
+                <th width="30%">
+                    Title
+                    <br><input type="text" id="filterTitle" placeholder="Filter by title" style="width:90%">
+                </th>
+                <th width="15%">
+                    Cuisine
+                    <br><input type="text" id="filterCuisine" placeholder="Filter by cuisine" style="width:90%">
+                </th>
+                <th width="10%">
+                    Rating
+                    <br><input type="number" id="filterRatingMin" placeholder="Min" step="0.1" min="0" max="5" style="width:40%">
+                    <input type="number" id="filterRatingMax" placeholder="Max" step="0.1" min="0" max="5" style="width:40%">
+                </th>
+                <th width="15%">
+                    Total Time (min)
+                    <br><input type="number" id="filterTimeMin" placeholder="Min" style="width:40%">
+                    <input type="number" id="filterTimeMax" placeholder="Max" style="width:40%">
+                </th>
+                <th width="15%">
+                    Serves
+                </th>
+            </tr>
+            <tr>
+                <th colspan="5">
+                    <button onclick="applyFilters()">Apply Filters</button>
+                    <button onclick="clearFilters()">Clear Filters</button>
+                </th>
+            </tr>
+        </thead>
+        <tbody id="recipeTableBody">
+            <tr><td colspan="5">Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <!-- Detail Drawer (Hidden by default) -->
+    <div id="detailDrawer" style="display:none; position:fixed; right:0; top:0; width:400px; height:100%; background:white; border-left:2px solid black; overflow:auto; padding:20px;">
+        <button onclick="closeDrawer()" style="float:right;">Close X</button>
+        <div id="drawerContent"></div>
+    </div>
+
+    <script>
+        let currentPage = 1;
+        let totalRecipes = 0;
+        let isFiltering = false;
+
+        // Load recipes on page load
+        window.onload = function() {
+            loadRecipes();
+        };
+
+        function getPerPage() {
+            return parseInt(document.getElementById('perPage').value);
+        }
+
+        function loadRecipes() {
+            const perPage = getPerPage();
+            const url = `/api/recipes?page=${currentPage}&limit=${perPage}`;
+
+            document.getElementById('recipeTableBody').innerHTML = '<tr><td colspan="5">Loading...</td></tr>';
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    totalRecipes = data.total;
+                    displayRecipes(data.data);
+                    updatePaginationInfo();
+                })
+                .catch(error => {
+                    document.getElementById('recipeTableBody').innerHTML = '<tr><td colspan="5">Error loading recipes: ' + error.message + '</td></tr>';
+                });
+        }
+
+        function applyFilters() {
+            const title = document.getElementById('filterTitle').value.trim();
+            const cuisine = document.getElementById('filterCuisine').value.trim();
+            const ratingMin = document.getElementById('filterRatingMin').value;
+            const ratingMax = document.getElementById('filterRatingMax').value;
+            const timeMin = document.getElementById('filterTimeMin').value;
+            const timeMax = document.getElementById('filterTimeMax').value;
+
+            // Check if any filter is applied
+            if (!title && !cuisine && !ratingMin && !ratingMax && !timeMin && !timeMax) {
+                alert('Please enter at least one filter criterion');
+                return;
+            }
+
+            isFiltering = true;
+            currentPage = 1;
+
+            const perPage = getPerPage();
+            let url = `/api/recipes/search?page=${currentPage}&limit=${perPage}`;
+
+            if (title) url += `&title=${encodeURIComponent(title)}`;
+            if (cuisine) url += `&cuisine=${encodeURIComponent(cuisine)}`;
+            if (ratingMin) url += `&rating_gte=${ratingMin}`;
+            if (ratingMax) url += `&rating_lte=${ratingMax}`;
+            if (timeMin) url += `&total_time_gte=${timeMin}`;
+            if (timeMax) url += `&total_time_lte=${timeMax}`;
+
+            document.getElementById('recipeTableBody').innerHTML = '<tr><td colspan="5">Searching...</td></tr>';
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    totalRecipes = data.total;
+                    if (data.data && data.data.length > 0) {
+                        displayRecipes(data.data);
+                    } else {
+                        document.getElementById('recipeTableBody').innerHTML = '<tr><td colspan="5"><h2>No Results Found</h2><p>No recipes match your search criteria. Please try different filters.</p></td></tr>';
+                    }
+                    updatePaginationInfo();
+                })
+                .catch(error => {
+                    document.getElementById('recipeTableBody').innerHTML = '<tr><td colspan="5">Error searching recipes: ' + error.message + '</td></tr>';
+                });
+        }
+
+        function clearFilters() {
+            document.getElementById('filterTitle').value = '';
+            document.getElementById('filterCuisine').value = '';
+            document.getElementById('filterRatingMin').value = '';
+            document.getElementById('filterRatingMax').value = '';
+            document.getElementById('filterTimeMin').value = '';
+            document.getElementById('filterTimeMax').value = '';
+            isFiltering = false;
+            currentPage = 1;
+            loadRecipes();
+        }
+
+        function displayRecipes(recipes) {
+            if (!recipes || recipes.length === 0) {
+                document.getElementById('recipeTableBody').innerHTML = '<tr><td colspan="5"><h2>No Data Available</h2><p>There are no recipes in the database.</p></td></tr>';
+                return;
+            }
+
+            let html = '';
+            recipes.forEach(recipe => {
+                const title = recipe.title || 'N/A';
+                const truncatedTitle = title.length > 50 ? title.substring(0, 50) + '...' : title;
+                const cuisine = recipe.cuisine || 'N/A';
+                const rating = recipe.rating !== null ? recipe.rating : 'N/A';
+                const totalTime = recipe.total_time !== null ? recipe.total_time : 'N/A';
+                const serves = recipe.serves || 'N/A';
+
+                html += `
+                    <tr onclick='showDetail(${JSON.stringify(recipe).replace(/'/g, "&apos;")})' style="cursor:pointer;">
+                        <td title="${title}">${truncatedTitle}</td>
+                        <td>${cuisine}</td>
+                        <td>${generateStars(rating)}</td>
+                        <td>${totalTime}</td>
+                        <td>${serves}</td>
+                    </tr>
+                `;
+            });
+
+            document.getElementById('recipeTableBody').innerHTML = html;
+        }
+
+        function generateStars(rating) {
+            if (rating === 'N/A' || rating === null) return 'N/A';
+
+            const fullStars = Math.floor(rating);
+            const hasHalfStar = (rating % 1) >= 0.5;
+            let stars = '';
+
+            for (let i = 0; i < fullStars; i++) {
+                stars += '★';
+            }
+            if (hasHalfStar) {
+                stars += '⯨';
+            }
+            const emptyStars = 5 - fullStars - (hasHalfStar ? 1 : 0);
+            for (let i = 0; i < emptyStars; i++) {
+                stars += '☆';
+            }
+
+            return stars + ' (' + rating + ')';
+        }
+
+        function showDetail(recipe) {
+            const drawer = document.getElementById('detailDrawer');
+            const content = document.getElementById('drawerContent');
+
+            let html = `
+                <h2>${recipe.title || 'N/A'}</h2>
+                <h3>${recipe.cuisine || 'N/A'}</h3>
+                <hr>
+
+                <p><strong>Description:</strong> ${recipe.description || 'No description available'}</p>
+
+                <p>
+                    <strong>Total Time:</strong> ${recipe.total_time || 'N/A'} minutes
+                    <button onclick="toggleTimeDetails()" id="timeToggle">▼ Expand</button>
+                </p>
+
+                <div id="timeDetails" style="display:none; margin-left:20px;">
+                    <p><strong>Prep Time:</strong> ${recipe.prep_time || 'N/A'} minutes</p>
+                    <p><strong>Cook Time:</strong> ${recipe.cook_time || 'N/A'} minutes</p>
+                </div>
+
+                <p><strong>Rating:</strong> ${generateStars(recipe.rating)}</p>
+                <p><strong>Serves:</strong> ${recipe.serves || 'N/A'}</p>
+
+                <hr>
+                <h3>Nutrition Information</h3>
+            `;
+
+            if (recipe.nutrients && typeof recipe.nutrients === 'object') {
+                html += '<table border="1" cellpadding="5" cellspacing="0" width="100%">';
+                html += '<tr><th>Nutrient</th><th>Value</th></tr>';
+
+                const nutrientOrder = [
+                    'calories',
+                    'carbohydrateContent',
+                    'cholesterolContent',
+                    'fiberContent',
+                    'proteinContent',
+                    'saturatedFatContent',
+                    'sodiumContent',
+                    'sugarContent',
+                    'fatContent'
+                ];
+
+                nutrientOrder.forEach(key => {
+                    if (recipe.nutrients[key]) {
+                        const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                        html += `<tr><td>${label}</td><td>${recipe.nutrients[key]}</td></tr>`;
+                    }
+                });
+
+                html += '</table>';
+            } else {
+                html += '<p>No nutrition information available</p>';
+            }
+
+            content.innerHTML = html;
+            drawer.style.display = 'block';
+        }
+
+        function closeDrawer() {
+            document.getElementById('detailDrawer').style.display = 'none';
+        }
+
+        function toggleTimeDetails() {
+            const details = document.getElementById('timeDetails');
+            const button = document.getElementById('timeToggle');
+
+            if (details.style.display === 'none') {
+                details.style.display = 'block';
+                button.textContent = '▲ Collapse';
+            } else {
+                details.style.display = 'none';
+                button.textContent = '▼ Expand';
+            }
+        }
+
+        function nextPage() {
+            const perPage = getPerPage();
+            const maxPage = Math.ceil(totalRecipes / perPage);
+
+            if (currentPage < maxPage) {
+                currentPage++;
+                if (isFiltering) {
+                    applyFilters();
+                } else {
+                    loadRecipes();
+                }
+            }
+        }
+
+        function previousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                if (isFiltering) {
+                    applyFilters();
+                } else {
+                    loadRecipes();
+                }
+            }
+        }
+
+        function updatePaginationInfo() {
+            const perPage = getPerPage();
+            const maxPage = Math.ceil(totalRecipes / perPage);
+
+            document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${maxPage}`;
+            document.getElementById('totalInfo').textContent = `(Total: ${totalRecipes} recipes)`;
+        }
+
+        // Close drawer when clicking outside
+        document.addEventListener('click', function(event) {
+            const drawer = document.getElementById('detailDrawer');
+            if (drawer.style.display === 'block' && !drawer.contains(event.target) && !event.target.closest('tr')) {
+                closeDrawer();
+            }
+        });
+    </script>
+</body>
+</html>
